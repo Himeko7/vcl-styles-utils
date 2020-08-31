@@ -114,6 +114,7 @@ type
 
   TNCControl = class(TCollectionItem)
   private
+    FImages: TCustomImageList;
     FFont: TFont;
     FEnabled: Boolean;
     FWidth: Integer;
@@ -141,11 +142,13 @@ type
     procedure SetShowHint(const Value: Boolean);
     procedure SetName(const Value: TComponentName);
     procedure DrawControl(ACanvas: TCanvas; AMouseInControl, Pressed: Boolean); virtual;
+    procedure SetButtonImages(const Value: TCustomImageList);
   protected
     procedure Handle_WMNCLButtonDown(var Message: TWMNCHitMessage); virtual;
     procedure Handle_WMNCLButtonUp(var Message: TWMNCHitMessage); virtual;
     procedure Handle_WMNCMouseMove(var Message: TWMNCHitMessage); virtual;
   published
+    property Images: TCustomImageList read FImages write SetButtonImages;
     procedure SetBounds(ALeft, ATop, AWidth, AHeight: Integer); virtual;
     property Left: Integer read FLeft write SetLeft;
     property Top: Integer read FTop write SetTop;
@@ -171,7 +174,7 @@ type
   TNCButton = class(TNCControl)
   public type
     TNCButtonStyle = (nsPushButton, nsTranparent, nsSplitButton, nsSplitTrans, nsAlpha, nsGradient, nsTab, nsEdge, nsFrame);
-    TNCImageStyle = (isNormal, isGray, isGrayHot);
+    TNCImageStyle = (isNormal, isGray, isGrayHot, isBlend);
   private
     FDropDown: Boolean;
     FStyle: TNCButtonStyle;
@@ -566,6 +569,22 @@ begin
     end;
 end;
 
+procedure DoDrawBlendImage(hdcDst: HDC; himl: HIMAGELIST; ImageIndex, X, Y: Integer);
+var
+  pimldp: TImageListDrawParams;
+begin
+  FillChar(pimldp, SizeOf(pimldp), #0);
+  pimldp.fState := ILS_ALPHA;
+  pimldp.Frame  := 128;
+  pimldp.cbSize := SizeOf(pimldp);
+  pimldp.hdcDst := hdcDst;
+  pimldp.himl := himl;
+  pimldp.i := ImageIndex;
+  pimldp.X := X;
+  pimldp.Y := Y;
+  ImageList_DrawIndirect(@pimldp);
+end;
+
 procedure DoDrawGrayImage(hdcDst: HDC; himl: HIMAGELIST; ImageIndex, X, Y: Integer);
 var
   pimldp: TImageListDrawParams;
@@ -723,6 +742,7 @@ var
   LStyleServices: TCustomStyleServices;
   LColor, LColor1, LColor2, ThemeTextColor: TColor;
   FButtonState: TThemedWindow;
+  VImages: TCustomImageList;
 
   function GetBorderSize: TRect;
   var
@@ -850,6 +870,10 @@ var
   end;
 
 begin
+
+  if FImages = nil then
+    VImages := NCControls.FImages else
+    VImages := FImages;
 
   LStyleServices := NCControls.StyleServices;
   BCaption := FCaption;
@@ -1099,8 +1123,8 @@ begin
     // Dec(IY);
     LRectAwesome := Rect(IX, IY, IX + IW + 2, IY + IH + 2);
   end
-  else if (LImgIndex >= 0) and (NCControls.FImages <> nil) and (NCControls.FImages.Handle <> 0) and
-    ImageList_GetIconSize(NCControls.FImages.Handle, IW, IH) then
+  else if (LImgIndex >= 0) and (VImages <> nil) and (VImages.Handle <> 0) and
+    ImageList_GetIconSize(VImages.Handle, IW, IH) then
   begin
 
     ButtonRect := DrawRect;
@@ -1157,9 +1181,11 @@ begin
     // if AMouseInControl then
     // Dec(IY);
     if Enabled and ((FImageStyle = isNormal) or ((FImageStyle = isGrayHot) and AMouseInControl)) then
-      ImageList_Draw(NCControls.FImages.Handle, LImgIndex, ACanvas.Handle, IX, IY, ILD_NORMAL)
+      ImageList_Draw(VImages.Handle, LImgIndex, ACanvas.Handle, IX, IY, ILD_NORMAL)
     else
-      DoDrawGrayImage(ACanvas.Handle, NCControls.FImages.Handle, LImgIndex, IX, IY);
+      if FImageStyle = isBlend then
+        DoDrawBlendImage(ACanvas.Handle, VImages.Handle, LImgIndex, IX, IY) else
+        DoDrawGrayImage(ACanvas.Handle, VImages.Handle, LImgIndex, IX, IY);
   end;
 
   if (FStyle in [nsSplitButton, nsSplitTrans]) then
@@ -2204,6 +2230,7 @@ constructor TNCControl.Create(Collection: TCollection);
 begin
   inherited Create(Collection);
   FNCControls := TNCControls(Collection.Owner);
+  FImages  := nil;
   FEnabled := True;
   FVisible := True;
   FFont := TFont.Create;
@@ -2277,7 +2304,11 @@ end;
 procedure TNCControl.SetName(const Value: TComponentName);
 begin
   FName := Value;
+end;
 
+procedure TNCControl.SetButtonImages(const Value: TCustomImageList);
+begin
+  FImages := Value;
 end;
 
 procedure TNCControl.SetShowHint(const Value: Boolean);
